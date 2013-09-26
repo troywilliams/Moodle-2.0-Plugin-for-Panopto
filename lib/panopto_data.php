@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /* Copyright Panopto 2009 - 2013 / With contributions from Spenser Jones (sjones@ambrose.edu)
  * 
  * This file is part of the Panopto plugin for Moodle.
@@ -17,12 +17,7 @@
  * along with the Panopto plugin for Moodle.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-global $CFG;
-if(empty($CFG)) {
-    require_once("../../config.php");
-}
-require_once ($CFG->libdir . '/dmllib.php');
-
+require_once(dirname(dirname(dirname(dirname(__FILE__)))).'/config.php');
 require_once("block_panopto_lib.php");
 require_once("PanoptoSoapClient.php");
 
@@ -65,7 +60,7 @@ class panopto_data {
         // Course will be null initially for batch-provisioning case.
         if(!empty($moodle_course_id)) {
             $this->moodle_course_id = $moodle_course_id;
-            $this->sessiongroup_id = panopto_data::get_panopto_course_id($moodle_course_id);
+            $this->sessiongroup_id = panopto_data::get_linked_panopto_folder($moodle_course_id);
         }
     }
 
@@ -85,6 +80,122 @@ class panopto_data {
         return $course_info;
     }
 
+    public function provision_folder($provisioninginfo) {
+        global $DB;
+        $courseinfo = $this->soap_client->ProvisionCourse($provisioninginfo);
+        if (!empty($courseinfo) and !empty($courseinfo->PublicID)) {
+            // no record means is a standard linked folder
+            $record = $DB->get_records('block_panopto_foldermap', array('courseid' => $this->moodle_course_id));
+            // no record so create
+            if (!$record) {
+                $record = new stdClass();
+                $record->courseid = $this->moodle_course_id;
+                $record->folderid = $courseinfo->PublicID;
+                $record->linkedfolderid = '';
+                $record->syncuserlist = 0;
+                $DB->insert_record('block_panopto_foldermap', $record);
+            }
+        }
+        return $courseinfo;
+    }
+
+    /**
+     * Fetches course information and membership data. Teachers are creators, Students are
+     * viewers. If other courses link to this courses Panopto folder, Students from courses
+     * are also added.
+     *
+     * @global type $DB
+     * @staticvar type $teacherrole
+     * @staticvar type $studentrole
+     * @return \stdClass
+     */
+    public function get_provisioning_data() {
+            global $DB;
+
+            static $teacherrole = null;
+            static $studentrole = null;
+
+            $userfields = 'u.id, u.username, u.firstname, u.lastname, u.email';
+
+            $admins = get_admins();
+
+            if (is_null($teacherrole)) {
+                $teacherroles = $DB->get_records('role', array('archetype'=>'editingteacher'));
+                $teacherrole = reset($teacherroles);
+            }
+
+            if (is_null($studentrole)) {
+                $studentroles = $DB->get_records('role', array('archetype'=>'student'));
+                $studentrole = reset($studentroles);
+            }
+
+            $course = $DB->get_record('course', array('id'=>$this->moodle_course_id), 'id, shortname, fullname');
+
+            $data = new stdClass();
+
+            $data->ShortName        = trim($course->shortname);
+            $data->LongName         = trim($course->fullname);
+            $data->ExternalCourseID = $this->instancename . ':' . $this->moodle_course_id;
+
+            $data->Instructors = array();
+            $data->Students    = array();
+
+            $context = get_context_instance(CONTEXT_COURSE, $this->moodle_course_id);
+            // main teachers
+            $teachers = get_role_users($teacherrole->id, $context, false, $userfields);
+            $teachers = array_merge($teachers, $admins);
+            if ($teachers) {
+                foreach ($teachers as $teacher) {
+                    $creator = new stdClass;
+                    $creator->UserKey = $this->panopto_decorate_username($teacher->username);
+                    $creator->FirstName = $teacher->firstname;
+                    $creator->LastName = $teacher->lastname;
+                    $creator->Email = $teacher->email;
+                    $creator->MailLectureNotifications = false;
+                    $data->Instructors[$teacher->username] = $creator;
+                }
+            }
+            // main students
+            $students = get_role_users($studentrole->id, $context, false, $userfields);
+            if ($students) {
+                foreach ($students as $student) {
+                    if (array_key_exists($student->username, array_keys($data->Instructors))) {
+                        continue;
+                    }
+                    $viewer = new stdClass;
+                    $viewer->UserKey = $this->panopto_decorate_username($student->username);
+                    $viewer->MailLectureNotifications = false;
+                    $data->Students[$student->username] = $viewer;
+                }
+            }
+
+            $panoptofolderid = panopto_data::get_panopto_course_id($course->id);
+            $courseslinkedtofolder = $DB->get_records('block_panopto_foldermap', array('linkedfolderid'=>$panoptofolderid));
+            if ($courseslinkedtofolder) {
+                foreach ($courseslinkedtofolder as $courselinkedtofolder) {
+                    $context = get_context_instance(CONTEXT_COURSE, $courselinkedtofolder->courseid);
+                    // Block exists in course?
+                    $params = array('blockname'=>'panopto', 'parentcontextid'=>$context->id);
+                    if (!$DB->record_exists('block_instances', $params)) {
+                       continue; // skipping students from this paper as no block exists.
+                    }
+                    $students = get_role_users($studentrole->id, $context, false, $userfields);
+                    if ($students) {
+                        foreach ($students as $student) {
+                            if (array_key_exists($student->username, array_keys($data->Instructors))) {
+                                continue;
+                            }
+                            $viewer = new stdClass();
+                            $viewer->UserKey = $this->panopto_decorate_username($student->username);
+                            $viewer->MailLectureNotifications = false;
+                            $data->Students[$student->username] = $viewer;
+                        }
+                    }
+
+                }
+            }
+            return $data;
+        }
     // Fetch course name and membership info from DB in preparation for provisioning operation.
     function get_provisioning_info() {
         global $DB;
@@ -171,7 +282,30 @@ class panopto_data {
 
         return $live_sessions;
     }
+    /**
+     * Since people like static methods round here
+     *
+     * @global type $DB
+     * @param type $courseid
+     * @return guid : null
+     */
+    public static function get_linked_panopto_folder($courseid) {
+        global $DB;
 
+        $record = $DB->get_record('block_panopto_foldermap', array('courseid'=>$courseid));
+        if ($record) {
+            // we are sharing, linked folder has priority cause thats where recordings
+            // are.
+            if ($record->linkedfolderid) {
+                return $record->linkedfolderid;
+            }
+            // no linked folder so send main
+            if ($record->folderid) {
+                return $record->folderid;
+            }
+        }
+        return false;
+    }
     // Get recordings available to view for the currently mapped course.
     function get_completed_deliveries() {
         $completed_deliveries_result = $this->soap_client->GetCompletedDeliveries($this->sessiongroup_id);
@@ -196,16 +330,16 @@ class panopto_data {
     // We need to retrieve the current course mapping in the constructor, so this must be static.
     static function get_panopto_course_id($moodle_course_id) {
         global $DB;
-        return $DB->get_field('block_panopto_foldermap', 'panopto_id', array('moodleid' => $moodle_course_id));
+        return $DB->get_field('block_panopto_foldermap', 'folderid', array('courseid' => $moodle_course_id));
     }
 
     // Called by Moodle block instance config save method, so must be static.
     static function set_panopto_course_id($moodle_course_id, $sessiongroup_id) {
         global $DB;
-        if($DB->get_records('block_panopto_foldermap', array('moodleid' => $moodle_course_id))) {
-            return $DB->set_field('block_panopto_foldermap', 'panopto_id', $sessiongroup_id, array('moodleid' => $moodle_course_id));
+        if($DB->get_records('block_panopto_foldermap', array('courseid' => $moodle_course_id))) {
+            return $DB->set_field('block_panopto_foldermap', 'folderid', $sessiongroup_id, array('courseid' => $moodle_course_id));
         } else {
-            $row = (object) array('moodleid' => $moodle_course_id, 'panopto_id' => $sessiongroup_id);
+            $row = (object) array('courseid' => $moodle_course_id, 'folderid' => $sessiongroup_id);
             return $DB->insert_record('block_panopto_foldermap', $row);
         }
     }

@@ -46,15 +46,27 @@ class block_panopto extends block_base {
     }
 
     // Save per-instance config in custom table instead of mdl_block_instance configdata column
-    function instance_config_save($data, $nolongerused = false) {
-        global $COURSE;
+    public function instance_config_save($data, $nolongerused = false) {
+        global $DB;
 
-        if(!empty($data->course)) {
-            return panopto_data::set_panopto_course_id($COURSE->id, $data->course);
-        } else {
-            // If server is not set globally, there will be no other form values to push into config.
-            return true;
+        if (empty($data->linkedfolderid)) {
+            print_error('You must select a Panopto folder');
         }
+        $record = $DB->get_record('block_panopto_foldermap', array('courseid'=>$data->courseid));
+        if ($record) {
+            $record->linkedfolderid = '';
+            if ($data->linkedfolderid != $record->folderid) {
+                $record->linkedfolderid = $data->linkedfolderid;
+            }
+            $DB->update_record('block_panopto_foldermap', $record);
+        } else {
+            $record = new stdClass();
+            $record->courseid       = $data->courseid;
+            $record->linkedfolderid = $data->linkedfolderid;
+            $DB->insert_record('block_panopto_foldermap', $record);
+        }
+        return $DB->set_field('block_panopto_foldermap', 'syncuserlist', 1,
+                               array('folderid'=>$data->linkedfolderid)); // force sync
     }
 
     // Generate HTML for block contents
@@ -242,6 +254,58 @@ class block_panopto extends block_base {
             'my' => false,
             'all' => true
         );
+    }
+
+    //public function sync_user_list_for_courseid($courseid) {
+    public function sync_users($courseid=null, $force=false) {
+        global $DB;
+
+        $sql = "SELECT bpf.*
+                  FROM {block_panopto_foldermap} bpf
+                  JOIN {course} c ON c.id = bpf.courseid
+                 WHERE bpf.linkedfolderid = :isempty";
+
+        $params = array('isempty' => $DB->sql_empty(), 'sync' => 1);
+
+        if (!$force) {
+            $sql .= " AND bpf.syncuserlist = :sync";
+            $params['sync'] = 1;
+        }
+
+        if ($courseid) {
+            $sql .= " AND c.id = :courseid";
+            $params['courseid'] = $courseid;
+        }
+
+        $rs = $DB->get_records_sql($sql, $params);
+        foreach ($rs as $record) {
+            if (!empty($record->linkedfolderid)) {
+                mtrace('Linked folders cannnot be provisioned directly');
+                continue;
+            }
+            //$coursecontext = context_course::instance($courseid);
+            $panoptodata = new panopto_data($record->courseid);
+            $provisioninginfo = $panoptodata->get_provisioning_data();
+            // @TODO
+            $provisioneddata = $panoptodata->provision_folder($provisioninginfo);
+            if (empty($provisioneddata)) {
+                mtrace("ERROR: could not sync users to panopto folder: ".$provisioneddata->PublicID);
+                return false;
+            } else {
+                mtrace("sync users to panopto folder: ".$provisioneddata->PublicID);
+                $DB->set_field('block_panopto_foldermap', 'syncuserlist', 0, array('courseid'=>$record->courseid));
+                if (CLI_SCRIPT) {
+                    mtrace('creators');
+                    foreach($provisioninginfo->Instructors as $staff) {
+                        mtrace($staff->UserKey);
+                    }
+                    mtrace('viewers');
+                    foreach($provisioninginfo->Students as $student) {
+                        mtrace($student->UserKey);
+                    }
+                }
+            }
+        }
     }
 }
 // End of block_panopto.php
