@@ -45,12 +45,15 @@ function xmldb_block_panopto_upgrade($oldversion, $block) {
     if ($oldversion < 2013100101){
         if (isset($CFG->block_panopto_instancename)){
             set_config('block_panopto_instance_name', $CFG->block_panopto_instancename);
+            unset_config('block_panopto_instancename');
         }
         if (isset($CFG->block_panopto_servername)){
             set_config('block_panopto_server_name', $CFG->block_panopto_servername);
+            unset_config('block_panopto_servername');
         }
         if (isset($CFG->block_panopto_applicationkey)){
             set_config('block_panopto_application_key', $CFG->block_panopto_applicationkey);
+            unset_config('block_panopto_applicationkey');
         }
         upgrade_block_savepoint(true, 2013100101, 'panopto');
     }
