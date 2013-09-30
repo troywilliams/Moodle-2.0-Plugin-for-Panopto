@@ -3,9 +3,14 @@ define('CLI_SCRIPT', true);
 
 require_once(dirname(dirname(dirname(dirname(__FILE__)))) . '/config.php');
 require_once($CFG->libdir.'/clilib.php');      // cli only functions
-//require_once($CFG->libdir.'/cronlib.php');      // cli only functions
 require_once($CFG->dirroot.'/blocks/panopto/lib/panopto_data.php');
 
+$version = $DB->get_field('block', 'version', array('name' => 'panopto'));
+if ($version != 2013100101) {
+    mtrace('Incorrect version, cannot run script');
+    exit;
+}
+        
 list($options, $unrecognized) = cli_get_params(
     array(
         'help'       => false
@@ -21,12 +26,12 @@ if ($unrecognized) {
 }
 if ($options['help']) {
     $help =
-"Command line: Upgrade
+"Command line: Upgrade folder linkage for cousrses to Panopto folders
 
 -h, --help      Print out this help
 
 Example:
-\$sudo -u apache /usr/bin/php blocks/panopto/cli/upgrade.php
+\$sudo -u apache /usr/bin/php blocks/panopto/cli/upgradefolderlinkage.php
 "; //TODO: localize - to be translated later when everything is finished
     echo $help;
     die;
@@ -45,7 +50,7 @@ if (!$instancename) {
     mtrace('No instance setup');
     exit;
 }
-mtrace('** Backups done? **');
+mtrace('** Caution: backups been done? **');
 $count = $DB->count_records('block_panopto_foldermap');
 $prompt = 'Found '.$count.' records, would you like to proceed? type y (means yes) or n (means no)';
 $input = cli_input($prompt, '', array('n', 'y'));
@@ -87,5 +92,6 @@ foreach ($records as $record) {
     }
 
 }
+
 mtrace('All done, move along...');
 exit;
