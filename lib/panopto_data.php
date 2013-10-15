@@ -83,17 +83,22 @@ class panopto_data {
     public function provision_folder($provisioninginfo) {
         global $DB;
         $courseinfo = $this->soap_client->ProvisionCourse($provisioninginfo);
+        
         if (!empty($courseinfo) and !empty($courseinfo->PublicID)) {
             // no record means is a standard linked folder
-            $record = $DB->get_records('block_panopto_foldermap', array('courseid' => $this->moodle_course_id));
+            $record = $DB->get_record('block_panopto_foldermap', array('courseid' => $this->moodle_course_id));
             // no record so create
             if (!$record) {
                 $record = new stdClass();
                 $record->courseid = $this->moodle_course_id;
                 $record->folderid = $courseinfo->PublicID;
                 $record->linkedfolderid = '';
-                $record->syncuserlist = 0;
+                $record->syncuserlist = 1;
                 $DB->insert_record('block_panopto_foldermap', $record);
+            } else {
+                $record->folderid = $courseinfo->PublicID;
+                $record->syncuserlist = 1;
+                $DB->update_record('block_panopto_foldermap', $record);
             }
         }
         return $courseinfo;
