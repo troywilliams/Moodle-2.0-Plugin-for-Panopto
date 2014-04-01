@@ -97,6 +97,7 @@ class panopto_data {
                 $DB->insert_record('block_panopto_foldermap', $record);
             } else {
                 $record->folderid = $courseinfo->PublicID;
+                $record->linkedfolderid = '';
                 $record->syncuserlist = 1;
                 $DB->update_record('block_panopto_foldermap', $record);
             }
@@ -117,21 +118,34 @@ class panopto_data {
     public function get_provisioning_data() {
             global $DB;
 
-            static $teacherrole = null;
+            static $helpdeskrole = null;
+            static $teacherroles = null;
             static $studentrole = null;
 
             $userfields = 'u.id, u.username, u.firstname, u.lastname, u.email';
 
             $admins = get_admins();
 
-            if (is_null($teacherrole)) {
+            $helpdeskusers = array();
+            if (is_null($helpdeskrole)) {
+                $helpdeskrole = $DB->get_record('role', array('shortname'=>'helpdesk'));
+                if ($helpdeskrole) {
+                    $helpdeskusers = get_role_users($helpdeskrole->id, context_system::instance());
+                }
+            }
+
+            if (is_null($teacherroles)) {
                 $teacherroles = $DB->get_records('role', array('archetype'=>'editingteacher'));
-                $teacherrole = reset($teacherroles);
+                if (! $teacherroles) {
+                    print_error("No teacher roles exist!");
+                }
             }
 
             if (is_null($studentrole)) {
-                $studentroles = $DB->get_records('role', array('archetype'=>'student'));
-                $studentrole = reset($studentroles);
+                $studentrole = $DB->get_record('role', array('shortname'=>'student'));
+                if (! $studentrole) {
+                    print_error("Student role does not exist!");
+                }
             }
 
             $course = $DB->get_record('course', array('id'=>$this->moodle_course_id), 'id, shortname, fullname');
@@ -147,8 +161,16 @@ class panopto_data {
 
             $context = get_context_instance(CONTEXT_COURSE, $this->moodle_course_id);
             // main teachers
-            $teachers = get_role_users($teacherrole->id, $context, false, $userfields);
+            $teachers = array();
+            // editingteacher, coteacher etc
+            foreach ($teacherroles as $teacherrole) {
+                $teachersinrole = get_role_users($teacherrole->id, $context, false, $userfields);
+                $teachers = array_merge($teachers, $teachersinrole);
+            }
+            // now add admins
             $teachers = array_merge($teachers, $admins);
+            // now add helpdesk users
+            $teachers = array_merge($teachers, $helpdeskusers);
             if ($teachers) {
                 foreach ($teachers as $teacher) {
                     $creator = new stdClass;

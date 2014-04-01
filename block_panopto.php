@@ -265,7 +265,7 @@ class block_panopto extends block_base {
                   JOIN {course} c ON c.id = bpf.courseid
                  WHERE bpf.linkedfolderid = :isempty";
 
-        $params = array('isempty' => $DB->sql_empty(), 'sync' => 1);
+        $params = array('isempty' => '', 'sync' => 1);
 
         if (!$force) {
             $sql .= " AND bpf.syncuserlist = :sync";

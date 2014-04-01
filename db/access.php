@@ -48,13 +48,39 @@ $capabilities = array(
 
         'clonepermissionsfrom' => 'moodle/site:manageblocks'
     ),
-   'block/panopto:myaddinstance' => array( 'captype' => 'write',
-       'contextlevel' => CONTEXT_SYSTEM, 
-       'archetypes' => array(
-           'user' => CAP_ALLOW
-         ), 
+
+    'block/panopto:myaddinstance' => array( 'captype' => 'write',
+        'contextlevel' => CONTEXT_SYSTEM,
+        'archetypes' => array(
+            'user' => CAP_ALLOW
+        ), 
         'clonepermissionsfrom' => 'moodle/my:manageblocks'
-   ) 
+   ),
+
+   'block/panopto:view' => array(
+
+        'captype' => 'read',
+        'contextlevel' => CONTEXT_COURSE,
+        'archetypes' => array(
+            'student' => CAP_ALLOW,
+            'teacher' => CAP_ALLOW,
+            'editingteacher' => CAP_ALLOW,
+            'manager' => CAP_PREVENT
+        )
+    ),
+
+    'block/panopto:create' => array(
+
+        'captype' => 'read',
+        'contextlevel' => CONTEXT_COURSE,
+        'archetypes' => array(
+            'student' => CAP_PREVENT,
+            'teacher' => CAP_PREVENT,
+            'editingteacher' => CAP_ALLOW,
+            'manager' => CAP_PREVENT
+        )
+    ),
+
 );
 
 /* End of file access.php */
