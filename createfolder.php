@@ -21,6 +21,9 @@ $pageurl = new moodle_url('/blocks/panopto/createfolder.php', array('courseid' =
 $PAGE->set_url($pageurl);
 
 if (!empty($confirm) && confirm_sesskey()) {
+    //$record = $DB->get_record('block_panopto_foldermap', array('courseid'=>$course->id));
+
+
     $panoptodata = new panopto_data($courseid);
     $provisioninginfo = $panoptodata->get_provisioning_data();
     $response = $panoptodata->provision_folder($provisioninginfo);

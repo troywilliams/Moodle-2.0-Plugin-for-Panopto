@@ -159,7 +159,7 @@ class panopto_data {
             $data->Instructors = array();
             $data->Students    = array();
 
-            $context = get_context_instance(CONTEXT_COURSE, $this->moodle_course_id);
+            $context = context_course::instance($this->moodle_course_id);
             // main teachers
             $teachers = array();
             // editingteacher, coteacher etc
@@ -200,7 +200,7 @@ class panopto_data {
             $courseslinkedtofolder = $DB->get_records('block_panopto_foldermap', array('linkedfolderid'=>$panoptofolderid));
             if ($courseslinkedtofolder) {
                 foreach ($courseslinkedtofolder as $courselinkedtofolder) {
-                    $context = get_context_instance(CONTEXT_COURSE, $courselinkedtofolder->courseid);
+                    $context = context_course::instance($courselinkedtofolder->courseid);
                     // Block exists in course?
                     $params = array('blockname'=>'panopto', 'parentcontextid'=>$context->id);
                     if (!$DB->record_exists('block_instances', $params)) {

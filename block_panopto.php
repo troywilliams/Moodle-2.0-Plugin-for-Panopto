@@ -78,7 +78,7 @@ class block_panopto extends block_base {
         }
 
         $this->content = new stdClass;
-
+$this->content->text='';
         // Construct the Panopto data proxy object
         $panopto_data = new panopto_data($COURSE->id);
 
@@ -200,7 +200,7 @@ class block_panopto extends block_base {
 								   							| <a href='$system_info->MacRecorderDownloadUrl'>Mac</a>)</span>
 			        							</div>";
                     }
-                     
+
                     $this->content->text .= '
 						<script type="text/javascript">
 			        // Function to pop up Panopto live note taker.
@@ -257,8 +257,16 @@ class block_panopto extends block_base {
     }
 
     //public function sync_user_list_for_courseid($courseid) {
-    public function sync_users($courseid=null, $force=false) {
+    public function sync_users($courseid=null, $force=false, $trace = null) {
         global $DB;
+
+        if (is_null($trace)) {
+            $trace =  new null_progress_trace();
+        }
+
+        $starttime = microtime();
+
+        $trace->output("Server Time: ".date('r', time()));
 
         $sql = "SELECT bpf.*
                   FROM {block_panopto_foldermap} bpf
@@ -280,7 +288,7 @@ class block_panopto extends block_base {
         $rs = $DB->get_records_sql($sql, $params);
         foreach ($rs as $record) {
             if (!empty($record->linkedfolderid)) {
-                mtrace('Linked folders cannnot be provisioned directly');
+                $trace->output('Linked folders cannnot be provisioned directly');
                 continue;
             }
             //$coursecontext = context_course::instance($courseid);
@@ -289,23 +297,29 @@ class block_panopto extends block_base {
             // @TODO
             $provisioneddata = $panoptodata->provision_folder($provisioninginfo);
             if (empty($provisioneddata)) {
-                mtrace("ERROR: could not sync users to panopto folder: ".$provisioneddata->PublicID);
+                $trace->output("ERROR: could not sync users to panopto folder: ".$provisioneddata->PublicID);
                 return false;
             } else {
-                mtrace("sync users to panopto folder: ".$provisioneddata->PublicID);
+                $trace->output($provisioneddata->DisplayName . " synced users to panopto folder: " . $provisioneddata->PublicID);
                 $DB->set_field('block_panopto_foldermap', 'syncuserlist', 0, array('courseid'=>$record->courseid));
                 if (CLI_SCRIPT) {
-                    mtrace('creators');
+                    $trace->output('creators');
                     foreach($provisioninginfo->Instructors as $staff) {
-                        mtrace($staff->UserKey);
+                        $trace->output($staff->UserKey);
                     }
-                    mtrace('viewers');
+                    $trace->output('viewers');
                     foreach($provisioninginfo->Students as $student) {
-                        mtrace($student->UserKey);
+                        $trace->output($student->UserKey);
                     }
                 }
             }
         }
+
+        $difftime = microtime_diff($starttime, microtime());
+
+        $trace->output("Finished there fruity! Time taken: {$difftime} seconds");
+
+        $trace->finished();
     }
 }
 // End of block_panopto.php

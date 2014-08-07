@@ -48,20 +48,22 @@ if ($debugthis) {
 }
 
 $block = new block_panopto();
-
+$trace = new progress_trace_buffer(new text_progress_trace(), true); // output and buffer
 if ($courseid) {
     $prompt = 'Sync users for courseid#'.$courseid.'? type y (means yes) or n (means no)';
     $input = cli_input($prompt, '', array('n', 'y'));
     if ($input == 'n') {
         exit(1);
     }
-    $block->sync_users($courseid, $fullforce);
+    $block->sync_users($courseid, $fullforce, $trace);
 } else {
     $prompt = 'Full user sync users? type y (means yes) or n (means no)';
     $input = cli_input($prompt, '', array('n', 'y'));
     if ($input == 'n') {
         exit(1);
     }
-    $block->sync_users();
+    $block->sync_users(null, false, $trace);
 }
+$messagetext = $trace->get_buffer();
+email_to_user(get_admin(), get_admin(), 'Panopto cron notification', $messagetext);
 mtrace('Done!');

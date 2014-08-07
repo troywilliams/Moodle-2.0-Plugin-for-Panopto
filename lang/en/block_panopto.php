@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /* Copyright Panopto 2009 - 2013 / With contributions from Spenser Jones (sjones@ambrose.edu)
  * 
  * This file is part of the Panopto plugin for Moodle.
@@ -22,6 +22,7 @@ $string['panopto:addinstance'] = 'Add a new Panopto block';
 $string['panopto:myaddinstance'] = 'Add a new Panopto block to my page';
 $string['panopto:provision_course'] = 'Provision a course';
 $string['panopto:provision_multiple'] = 'Provision multiple courses at once';
+$string['panoptocron'] = 'Panopto cron task';
 $string['provision_courses'] = 'Provision Courses';
 $string['provisioncourseselect'] = 'Select Courses to Provision.';
 $string['provisioncourseselect_help'] = 'Multiple selections are possible by Ctrl-clicking (Windows) or Cmd-clicking (Mac).';

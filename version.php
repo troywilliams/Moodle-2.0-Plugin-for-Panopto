@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /* Copyright Panopto 2009 - 2013
  * 
  * This file is part of the Panopto plugin for Moodle.
@@ -34,7 +34,7 @@
  
 defined('MOODLE_INTERNAL') || die();
  
-$plugin->version   = 2013100102;
-$plugin->requires  = 2010112400; // Version 2.0
+$plugin->version   = 2014080800;
+$plugin->requires  = 2014051200; // Version 2.7
 $plugin->cron      = 0;
 $plugin->maturity  = MATURITY_STABLE;
