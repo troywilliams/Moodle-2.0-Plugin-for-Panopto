@@ -119,110 +119,95 @@ class panopto_data {
             global $DB;
 
             static $helpdeskrole = null;
-            static $teacherroles = null;
-            static $studentrole = null;
+            $data       = new stdClass();
 
+            $creators   = array();
+            $viewers    = array();
             $userfields = 'u.id, u.username, u.firstname, u.lastname, u.email';
 
+            // Site level creators
             $admins = get_admins();
-
-            $helpdeskusers = array();
+            $helpers = array();
             if (is_null($helpdeskrole)) {
                 $helpdeskrole = $DB->get_record('role', array('shortname'=>'helpdesk'));
                 if ($helpdeskrole) {
-                    $helpdeskusers = get_role_users($helpdeskrole->id, context_system::instance());
+                    $helpers = get_role_users($helpdeskrole->id, context_system::instance());
                 }
             }
+            // A beautiful union.
+            $creators = $admins + $helpers;
 
-            if (is_null($teacherroles)) {
-                $teacherroles = $DB->get_records('role', array('archetype'=>'editingteacher'));
-                if (! $teacherroles) {
-                    print_error("No teacher roles exist!");
-                }
-            }
-
-            if (is_null($studentrole)) {
-                $studentrole = $DB->get_record('role', array('shortname'=>'student'));
-                if (! $studentrole) {
-                    print_error("Student role does not exist!");
-                }
-            }
-
-            $course = $DB->get_record('course', array('id'=>$this->moodle_course_id), 'id, shortname, fullname');
-
-            $data = new stdClass();
-
+            $course                 = $DB->get_record('course', array('id'=>$this->moodle_course_id), 'id, shortname, fullname');
+            // Setup required name fields for data bundle.
             $data->ShortName        = trim($course->shortname);
             $data->LongName         = trim($course->fullname);
-            $data->ExternalCourseID = $this->instancename . ':' . $this->moodle_course_id;
+            $data->ExternalCourseID = $this->instancename . ':' . $course->id;
 
-            $data->Instructors = array();
-            $data->Students    = array();
-
-            $context = context_course::instance($this->moodle_course_id);
-            // main teachers
-            $teachers = array();
-            // editingteacher, coteacher etc
-            foreach ($teacherroles as $teacherrole) {
-                $teachersinrole = get_role_users($teacherrole->id, $context, false, $userfields);
-                $teachers = array_merge($teachers, $teachersinrole);
+            $coursecontext          = context_course::instance($course->id);
+            // Get users that can create recordings in primary course
+            $coursecreators = get_enrolled_users($coursecontext, 'block/panopto:create', 0, $userfields);
+            if ($coursecreators) {
+                // A beautiful union.
+                $creators = $creators + $coursecreators;
             }
-            // now add admins
-            $teachers = array_merge($teachers, $admins);
-            // now add helpdesk users
-            $teachers = array_merge($teachers, $helpdeskusers);
-            if ($teachers) {
-                foreach ($teachers as $teacher) {
-                    $creator = new stdClass;
-                    $creator->UserKey = $this->panopto_decorate_username($teacher->username);
-                    $creator->FirstName = $teacher->firstname;
-                    $creator->LastName = $teacher->lastname;
-                    $creator->Email = $teacher->email;
-                    $creator->MailLectureNotifications = false;
-                    $data->Instructors[$teacher->username] = $creator;
-                }
+            $courseviewers = get_enrolled_users($coursecontext, 'block/panopto:view', 0, $userfields);
+            if ($courseviewers) {
+                // A beautiful union.
+                $viewers = $viewers + $courseviewers;
             }
-            // main students
-            $students = get_role_users($studentrole->id, $context, false, $userfields);
-            if ($students) {
-                foreach ($students as $student) {
-                    if (array_key_exists($student->username, array_keys($data->Instructors))) {
-                        continue;
-                    }
-                    $viewer = new stdClass;
-                    $viewer->UserKey = $this->panopto_decorate_username($student->username);
-                    $viewer->MailLectureNotifications = false;
-                    $data->Students[$student->username] = $viewer;
-                }
-            }
-
+            // Get panopto folder guid
             $panoptofolderid = panopto_data::get_panopto_course_id($course->id);
-            $courseslinkedtofolder = $DB->get_records('block_panopto_foldermap', array('linkedfolderid'=>$panoptofolderid));
-            if ($courseslinkedtofolder) {
-                foreach ($courseslinkedtofolder as $courselinkedtofolder) {
-                    $context = context_course::instance($courselinkedtofolder->courseid);
-                    // Block exists in course?
-                    $params = array('blockname'=>'panopto', 'parentcontextid'=>$context->id);
-                    if (!$DB->record_exists('block_instances', $params)) {
-                       continue; // skipping students from this paper as no block exists.
-                    }
-                    $students = get_role_users($studentrole->id, $context, false, $userfields);
-                    if ($students) {
-                        foreach ($students as $student) {
-                            if (array_key_exists($student->username, array_keys($data->Instructors))) {
-                                continue;
-                            }
-                            $viewer = new stdClass();
-                            $viewer->UserKey = $this->panopto_decorate_username($student->username);
-                            $viewer->MailLectureNotifications = false;
-                            $data->Students[$student->username] = $viewer;
+            if ($panoptofolderid) {
+                $courseslinkedtofolder = $DB->get_records('block_panopto_foldermap', array('linkedfolderid'=>$panoptofolderid));
+                if ($courseslinkedtofolder) {
+                    foreach ($courseslinkedtofolder as $courselinkedtofolder) {
+                        $linkedcoursecontext = context_course::instance($courselinkedtofolder->courseid);
+                        // Block exists in course?
+                        $params = array('blockname'=>'panopto', 'parentcontextid'=>$linkedcoursecontext->id);
+                        if (!$DB->record_exists('block_instances', $params)) {
+                           continue; // skipping students from this paper as no block exists.
+                        }
+                        $linkedcoursecreators = get_enrolled_users($linkedcoursecontext, 'block/panopto:create', 0, $userfields);
+                        if ($linkedcoursecreators) {
+                            // A beautiful union.
+                            $creators = $creators + $linkedcoursecreators;
+                        }
+                        $linkedcourseviewers = get_enrolled_users($linkedcoursecontext, 'block/panopto:view', 0, $userfields);
+                        if ($linkedcourseviewers) {
+                            // A beautiful union.
+                            $viewers = $viewers + $linkedcourseviewers;
                         }
                     }
-
                 }
             }
+            // Setup creators for data bundle.
+            $data->Instructors = array();
+            while ($creators) {
+                $creator = array_shift($creators);
+                $user = new \stdClass();
+                $user->UserKey                          = $this->panopto_decorate_username($creator->username);
+                $user->FirstName                        = $creator->firstname;
+                $user->LastName                         = $creator->lastname;
+                $user->Email                            = $creator->email;
+                $user->MailLectureNotifications         = 0;
+                $data->Instructors[$creator->username]  = $user;
+            }
+
+            // Setup viewers for data bundle.
+            $data->Students    = array();
+            while ($viewers) {
+                $viewer = array_shift($viewers);
+                // Don't add user as viewer if already a creator.
+                if (array_key_exists($viewer->username, array_keys($data->Instructors))) {
+                        continue;
+                }
+                $user = new \stdClass();
+                $user->UserKey                      = $this->panopto_decorate_username($viewer->username);
+                $user->MailLectureNotifications     = 0;
+                $data->Students[$viewer->username]  = $user;
+            }
             return $data;
-        }
+    }
     // Fetch course name and membership info from DB in preparation for provisioning operation.
     function get_provisioning_info() {
         global $DB;
