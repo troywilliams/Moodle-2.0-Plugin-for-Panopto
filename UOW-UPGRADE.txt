@@ -1,0 +1,13 @@
+Guide for upgrading from bespoke UoW version.
+
+The upgrade code has been modified to allow a upgrade path from old UoW bespoke version to the standard Panopto distributed plugin.
+
+Once upgrade to version 2017082900 is complete, any subsequent upgrades can use later plugin versions distributed by Panopto.
+
+More information at: https://support.panopto.com/articles/Documentation/Moodle-Plugin-Upgrade-2017-2017061000
+
+In Panopto Admin, configure Identity Provider "elearn" to use Plug-in generation: 2 (2017060100)
+
+SSH into Moodle Admin VM, run:
+
+$ sudo -u apache /usr/bin/php blocks/panopto/cli/upgrade.php
