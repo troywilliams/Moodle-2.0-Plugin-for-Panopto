@@ -68,6 +68,7 @@ if ($interactive) {
 
 cron_setup_user();
 
+$failcount = 0;
 $dbman = $DB->get_manager();
 
 // Get all active courses mapped to Panopto.
@@ -137,8 +138,12 @@ foreach ($oldpanoptocourses as $oldcourse) {
     $oldpanoptocourse->provisioninginfo = $oldpanoptocourse->panopto->get_provisioning_info();
     if (isset($oldpanoptocourse->provisioninginfo->accesserror) &&
         $oldpanoptocourse->provisioninginfo->accesserror === true) {
-        $usercanupgrade = false;
-        break;
+        mtrace('Panopto folder access error, removing mapping');
+        $failcount++;
+        panopto_data::delete_panopto_relation($oldcourse->moodleid, false);
+        continue;
+        //$usercanupgrade = false;
+        //break;
     } else {
         if (isset($oldpanoptocourse->provisioninginfo->couldnotfindmappedfolder) &&
             $oldpanoptocourse->provisioninginfo->couldnotfindmappedfolder === true) {
@@ -167,8 +172,12 @@ foreach ($oldpanoptocourses as $oldcourse) {
                 // False means the user failed to get the folder.
                 $importpanoptofolder = $importpanopto->get_folders_by_id();
                 if (isset($importpanoptofolder) && $importpanoptofolder === false) {
-                    $usercanupgrade = false;
-                    break;
+                    mtrace('Panopto folder access error, removing mapping');
+                    $failcount++;
+                    panopto_data::delete_panopto_relation($oldcourse->moodleid, false);
+                    continue;
+                    //$usercanupgrade = false;
+                    //break;
                 } else if (!isset($importpanoptofolder) || $importpanoptofolder === -1) {
                     // In this case the folder was not found, not an access issue. Most likely the folder was deleted and this is an old entry.
                     // Move the entry to the old_foldermap so user still has a reference.
@@ -220,5 +229,6 @@ function block_panopto_update_upgrade_progress($currentprogress, $totalitems, $p
         panopto_data::print_log('Processing folder ' . $currentprogress . ' out of ' . $totalitems);
     }
 }
-
+mtrace('Fail folder verfication count: ' . $failcount);
+mtrace(userdate(time()));
 exit(0);
